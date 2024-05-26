@@ -1,0 +1,49 @@
+version: '3'
+
+services:
+  minio:
+    image: minio/minio
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_DOMAIN=minio
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=password
+    ports:
+      - 9001:9001
+      - 9000:9000
+    command: [ "server", "/data", "--console-address", ":9001" ]
+
+  mc:
+    depends_on:
+      - minio
+    image: minio/mc
+    container_name: mc
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc rm -r --force minio/dremio;
+      /usr/bin/mc mb minio/dremio;
+      /usr/bin/mc policy set public minio/dremio;
+      tail -f /dev/null
+      "
+
+  dremio:
+    image: 'dremio/dremio-oss:25.0'
+    ports:
+      - 9047:9047
+      - 31010:31010
+      - 32010:32010
+      - 45678:45678
+    depends_on:
+      - mc
+    volumes:
+      - ./conf/dremio.conf:/opt/dremio/conf/dremio.conf
+      - ./conf/core-site.xml:/opt/dremio/conf/core-site.xml
+
+volumes:
+  minio:
